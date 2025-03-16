@@ -1,0 +1,84 @@
+<?php
+
+namespace App\Services\Website\Candidate;
+
+use App\Models\User;
+use Carbon\Carbon;
+
+class CandidateProfileDetailsService
+{
+    /**
+     * Get candidate profile details
+     */
+    public function execute($request): array
+    {
+        $user = authUser();
+
+        if ($user->role != 'company') {
+            $candidate = User::where('username', $request->username)
+                ->with(['contactInfo', 'socialInfo', 'candidate' => function ($query) {
+                    $query->with('experience', 'education', 'experiences', 'educations', 'profession', 'languages:id,name', 'skills', 'socialInfo');
+                }])->firstOrFail();
+            $languages = $candidate->candidate
+                ->languages()
+                ->pluck('name')
+                ->toArray();
+            $candidate_languages = $languages ? implode(', ', $languages) : '';
+
+            $skills = $candidate->candidate->skills->pluck('name');
+            $candidate_skills = $skills ? implode(', ', json_decode(json_encode($skills), true)) : '';
+
+            return [
+                'success' => true,
+                'data' => $candidate,
+                'skills' => $candidate_skills ?? '',
+                'languages' => $candidate_languages ?? '',
+                'profile_view_limit' => '',
+            ];
+        }
+
+        $candidate = User::where('username', $request->username)
+            ->with(['contactInfo', 'socialInfo', 'candidate' => function ($query) {
+                $query->with('experience', 'education', 'experiences', 'educations', 'profession', 'languages:id,name', 'skills', 'socialInfo')
+                    ->withCount(['bookmarkCandidates as bookmarked' => function ($q) {
+                        $q->where('company_id', currentCompany()->id);
+                    }])
+                    ->withCount(['already_views as already_view' => function ($q) {
+                        $q->where('company_id', currentCompany()->id);
+                    }]);
+            }])->firstOrFail();
+
+        $candidate->candidate->birth_date = Carbon::parse($candidate->candidate->birth_date)->format('d F, Y');
+
+        if ($request->count_view) {
+            $company = auth()->user()->company;
+            $cv_views = $company->cv_views; // get auth company all cv views
+            $cv_view_exist = $cv_views->where('candidate_id', $candidate->candidate->id)->first(); // get specific view
+
+            if (! $cv_view_exist) {
+                // and create view count item
+                $company->cv_views()->create([
+                    'candidate_id' => $candidate->candidate->id,
+                    'view_date' => Carbon::parse(Carbon::now()),
+                ]);
+            }
+        }
+
+        $languages = $candidate->candidate
+            ->languages()
+            ->pluck('name')
+            ->toArray();
+        $candidate_languages = $languages ? implode(', ', $languages) : '';
+
+        $skills = $candidate->candidate->skills->pluck('name');
+        $candidate_skills = $skills ? implode(', ', json_decode(json_encode($skills), true)) : '';
+
+        return [
+            'success' => true,
+            'data' => $candidate,
+            'skills' => $candidate_skills ?? '',
+            'languages' => $candidate_languages ?? '',
+            'profile_view_limit' => 9999999,
+        ];
+    }
+}
