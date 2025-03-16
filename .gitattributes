@@ -1,0 +1,13 @@
+# Ensure text files always use LF line endings in the repository
+* text=auto eol=lf
+
+# Explicitly treat SVG files as text and enforce LF line endings
+*.svg text eol=lf
+
+# Treat binary files as binary (no line ending conversion)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.woff binary
+*.woff2 binary
